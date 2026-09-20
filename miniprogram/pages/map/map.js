@@ -91,6 +91,29 @@ Page({
     return n;
   },
 
+  /**
+   * 市级区块几何（858KB）平时不 require —— 下钻到某个省时才第一次加载。
+   * 拿不到也不影响使用：内核发现没有区块几何会自动退回圆点画法。
+   */
+  loadCityGeom(ad) {
+    const k = this.kernel;
+    if (!k || !ad || k.cityGeom[ad]) return;
+    try {
+      if (!this._cities) this._cities = require('../../utils/cities.js');
+      const list = this._cities && this._cities[ad];
+      if (list) k.setCityGeom(ad, list);
+    } catch (e) {
+      console.warn('[footprint] 市级区块数据不可用，退回圆点：', e);
+    }
+  },
+
+  enterProvince(ad) {
+    this.kernel.drill(ad);
+    this.loadCityGeom(ad);
+    this.hideSheet();
+    this.render();
+  },
+
   persist() {
     wx.setStorageSync(STORE_KEY, this.kernel.exportVisited());
   },
@@ -136,9 +159,7 @@ Page({
     // 中国 / 世界总览：第一次点选中并弹面板，点同一个再进省内
     if (this.hitCache && this.hitCache.key === hit.key &&
         hit.kind === 'province' && this.hasChildren(hit.key)) {
-      k.drill(hit.key);
-      this.hideSheet();
-      this.render();
+      this.enterProvince(hit.key);
       return;
     }
     this.hitCache = hit;
@@ -189,9 +210,7 @@ Page({
   onSheetDrill() {
     const sel = this.kernel && this.kernel.selected;
     if (!sel || sel.kind !== 'province') return;
-    this.kernel.drill(sel.key);
-    this.hideSheet();
-    this.render();
+    this.enterProvince(sel.key);
   },
 
   onReset() {

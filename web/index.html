@@ -4,7 +4,7 @@
 <meta charset="utf-8" data-page-node-id="Kcxi6Qb6WZGgtFmD76W8Iz">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" data-page-node-id="aEWklOsvlLkE7kpSNpi8UY">
 <title>足迹点亮 · H5</title>
-<meta name="description" content="足迹点亮地图：世界/中国地图切换，可下钻到省，省内城市圆点点亮。纯 Canvas 自绘，无需地图 SDK。">
+<meta name="description" content="足迹点亮地图：世界/中国地图切换，可下钻到省，省内按地级市区块点亮。纯 Canvas 自绘，无需地图 SDK。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F7F6F3'/%3E%3Cpath d='M16 6c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z' fill='%23C0503C'/%3E%3Ccircle cx='16' cy='13' r='2.6' fill='%23F7F6F3'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -131,7 +131,7 @@
   </div>
 </div>
 
-<div class="tip" data-page-node-id="BkBDEXVXymF9l4eKTMmVvz">点击省份选中，再点一次进入省内 · 省内地级市点即点亮</div>
+<div class="tip" data-page-node-id="BkBDEXVXymF9l4eKTMmVvz">点击省份选中，再点一次进入省内 · 省内点地级市区块即点亮</div>
 
 <script src="../src/map-core.js"></script>
 <script>
@@ -259,6 +259,43 @@
     return !!(bag && bag.cities && bag.cities.length);
   }
 
+  /* ---------- 市级区块数据：懒加载 ----------
+     整份 cities.json 有 800 多 KB，不进首屏。第一次下钻才开始取，取到一次就缓存住。
+     取不到也不影响使用 —— 内核发现没有区块几何时会自动退回圆点画法。 */
+  var cityData = null, cityLoading = null;
+
+  function loadCityData() {
+    if (cityData) return Promise.resolve(cityData);
+    if (cityLoading) return cityLoading;
+    var src = Promise.resolve(window.__CITY_DATA__ || fetch('../dist/cities.json').then(function (r) { return r.json(); }));
+    cityLoading = Promise.resolve(src).then(function (d) {
+      cityData = d; cityLoading = null; return d;
+    }).catch(function () {
+      cityLoading = null; return null;          // 离线 / 单文件预览未内联时静默降级
+    });
+    return cityLoading;
+  }
+
+  function ensureCityGeom(ad) {
+    if (!ad) return Promise.resolve(false);
+    if (kernel.cityGeom[ad]) return Promise.resolve(true);
+    return loadCityData().then(function (d) {
+      if (!d || !d[ad]) return false;
+      kernel.setCityGeom(ad, d[ad]);
+      return true;
+    });
+  }
+
+  function enterProvince(ad) {
+    kernel.drill(ad);
+    hideSheet();
+    layout();
+    render();
+    ensureCityGeom(ad).then(function (ok) {
+      if (ok && kernel.focus === ad) render();   // 数据到位后补一次重绘
+    });
+  }
+
   /** 面板和进度卡共用一个位置，谁显示谁占位 —— 都不参与布局，所以地图永不位移 */
   function setSheetVisible(on) {
     sheet.className = on ? 'sheet show' : 'sheet';
@@ -282,7 +319,7 @@
     btnToggle.textContent = visited ? '取消点亮' : '点亮';
     btnToggle.className = visited ? 'btn ghost' : 'btn primary';
     btnDrill.style.display = (sel.kind === 'province' && hasChildren(sel.key)) ? '' : 'none';
-    btnDrill.onclick = function () { kernel.drill(sel.key); hideSheet(); layout(); render(); };
+    btnDrill.onclick = function () { enterProvince(sel.key); };
     setSheetVisible(true);
   }
 
@@ -335,7 +372,7 @@
     }
     if (!hit) { hideSheet(); layout(); render(); return; }
     if (kernel.selected && kernel.selected.key === hit.key && hit.kind === 'province' && hasChildren(hit.key)) {
-      kernel.drill(hit.key); hideSheet(); layout(); render(); return;
+      enterProvince(hit.key); return;
     }
     kernel.selected = { kind: hit.kind, key: hit.key };
     syncSheet();
@@ -378,6 +415,8 @@
       window.__kernel = kernel;   // 调试 / 自动化用
       layout();
       render();
+      // 首屏画完再后台去取市级区块数据，不跟首屏抢带宽；等下钻时基本已经就绪
+      setTimeout(function () { loadCityData(); }, 1200);
     })
     .catch(function (err) {
       document.querySelector('.tip').innerHTML =

@@ -33,6 +33,11 @@
     dot: '#C6C3BA',
     dotVisited: '#D85A30',
     dotStroke: '#FFFFFF',
+    // 市级「区块」：未点亮是浅灰块，点亮是一整块主色，块间用白缝切开
+    block: '#E4E1D9',
+    blockStroke: '#FFFFFF',
+    blockOn: '#D85A30',
+    blockOnStroke: '#993C1D',
     insetBg: 'rgba(255,255,255,0.78)',
     insetStroke: '#D5D2C9',
     ocean: 'transparent'
@@ -175,6 +180,10 @@
     for (i = 0; i < this.countries.length; i++) this.countryByKey[this.countries[i].key] = this.countries[i];
 
     this.cities = data.cities || {};
+    // 市级区块几何，由容器按需注入（体积大，不跟着主数据一起加载）
+    // 结构：{ 省adcode: [preparedFeature | null, ...] }，顺序与 cities[adcode].cities 严格一致，
+    // 这样才能继续用「省adcode:序号」作点亮 key，老数据不会错位。
+    this.cityGeom = {};
     this.chinaBBox = unionBBox(this.provinces, MAIN_LAT_MIN);
     if (!isFinite(this.chinaBBox[0])) this.chinaBBox = DEFAULT_CHINA_BBOX;
     this.view = null;
@@ -305,6 +314,34 @@
     return bag && bag.cities ? bag.cities : [];
   };
 
+  /**
+   * 注入某个省的市级区块几何。容器按需加载后调用（H5 用 fetch，小程序用分包 require）。
+   *
+   * list 顺序必须与 visibleCities() 一致；没有几何的项直接给 null，
+   * **不要过滤掉**，否则后面的市全部错位、已点亮的市会集体串号。
+   */
+  MapKernel.prototype.setCityGeom = function (adcode, list) {
+    var out = new Array(list.length);
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      out[i] = (c && c.g) ? prepareFeature(String(c.ad || i), c.n, c.g, c.c || null) : null;
+    }
+    this.cityGeom[adcode] = out;
+    this.onChange();
+  };
+
+  /** 当前省的市级区块；没注入过就返回 null（此时退回圆点绘制） */
+  MapKernel.prototype.visibleCityGeom = function () {
+    return this.cityGeom[this.focus] || null;
+  };
+
+  MapKernel.prototype.hasCityGeom = function () {
+    var g = this.visibleCityGeom();
+    if (!g) return false;
+    for (var i = 0; i < g.length; i++) if (g[i]) return true;
+    return false;
+  };
+
   /** 小面积区域（港澳、新加坡…）手指很难点中，退化为找最近的中心点 */
   MapKernel.prototype.nearestByCenter = function (list, kind, x, y, maxDist, skip) {
     var best = null, bestD = maxDist;
@@ -330,8 +367,25 @@
     }
     if (this.focus) {
       var list = this.visibleCities();
+      var geom = this.visibleCityGeom();
+      var gi, gf;
+      // 有区块几何：精确命中（区块铺满全省，点哪块算哪块）
+      if (geom) {
+        for (gi = 0; gi < geom.length; gi++) {
+          gf = geom[gi];
+          if (!gf) continue;
+          if (this.projectFeatureHit(gf, x, y, null)) {
+            return {
+              kind: 'city', key: this.cityKey(this.focus, gi), index: gi,
+              name: (list[gi] && list[gi].name) || gf.name
+            };
+          }
+        }
+      }
+      // 兜底只给「没有区块」的市（如台湾省 / 单个缺几何的市），容差按圆点时的 22px
       var best = null, bestD = 1e9;
       for (i = 0; i < list.length; i++) {
+        if (geom && geom[i]) continue;
         var pt = this.project(list[i].lng, list[i].lat);
         var d = Math.hypot(pt[0] - x, pt[1] - y);
         if (d < 22 && d < bestD) { bestD = d; best = i; }
@@ -442,19 +496,52 @@
 
   // ---------- 省内视图：省轮廓 + 市级点 ----------
   MapKernel.prototype.drawProvinceDetail = function (ctx) {
-    var th = this.theme;
+    var th = this.theme, i, gf, k;
     var f = this.provinceByKey[this.focus];
     if (f) {
-      var rings = this.projectRings(f, null);
-      this.fillFeature(ctx, rings, th.land, th.landStroke, 0.7);
+      var prings = this.projectRings(f, null);
+      this.fillFeature(ctx, prings, th.land, th.landStroke, 0.7);
     }
+
     var list = this.visibleCities();
+    var geom = this.visibleCityGeom();
     var labelAll = list.length <= 18;
-    var i;
+    var selKey = this.selected && this.selected.kind === 'city' ? this.selected.key : null;
+    var hovKey = this.hover && this.hover.kind === 'city' ? this.hover.key : null;
+
+    if (this.hasCityGeom()) {
+      // 投影一次缓存，填充与描边分两遍走 —— 否则白缝会被相邻块的填充盖掉
+      var cache = [];
+      for (i = 0; i < geom.length; i++) {
+        gf = geom[i];
+        if (!gf) continue;
+        var rs = this.projectRings(gf, null);
+        if (rs.length) {
+          cache.push({ i: i, rings: rs, on: this.isVisited('city', this.cityKey(this.focus, i)) });
+        }
+      }
+      for (i = 0; i < cache.length; i++) {
+        this.fillFeature(ctx, cache[i].rings, cache[i].on ? th.blockOn : th.block, null, 0);
+      }
+      for (i = 0; i < cache.length; i++) {
+        var c = cache[i];
+        k = this.cityKey(this.focus, c.i);
+        var stroke = c.on ? th.blockOnStroke : th.blockStroke;
+        var lw = c.on ? 0.9 : 0.7;
+        if (k === selKey) { stroke = th.hoverStroke; lw = 1.8; }
+        else if (k === hovKey) { stroke = th.hoverStroke; lw = 1.4; }
+        this.pathRings(ctx, c.rings);
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lw;
+        ctx.stroke();
+      }
+    }
+
+    // 没有区块几何的市（如台湾省整省、或个别缺数据）→ 保留原来的圆点画法
     for (i = 0; i < list.length; i++) {
+      if (geom && geom[i]) continue;
       var pt = this.project(list[i].lng, list[i].lat);
-      var key = this.cityKey(this.focus, i);
-      var on = this.isVisited('city', key);
+      var on = this.isVisited('city', this.cityKey(this.focus, i));
       ctx.beginPath();
       ctx.arc(pt[0], pt[1], on ? 5 : 3, 0, Math.PI * 2);
       ctx.fillStyle = on ? th.dotVisited : th.dot;
@@ -463,13 +550,16 @@
       ctx.lineWidth = on ? 1.6 : 1;
       ctx.stroke();
     }
+
     var items = [];
     for (i = 0; i < list.length; i++) {
       var on2 = this.isVisited('city', this.cityKey(this.focus, i));
       if (!labelAll && !on2) continue;
-      var pt2 = this.project(list[i].lng, list[i].lat);
+      // 有区块就用官方中心点（多岛市如舟山，用市界质心会落到海里）
+      var cen = (geom && geom[i] && geom[i].center) || [list[i].lng, list[i].lat];
+      var pt2 = this.project(cen[0], cen[1]);
       items.push({
-        text: list[i].name, x: pt2[0], y: pt2[1] + 13,
+        text: list[i].name, x: pt2[0], y: pt2[1],
         color: on2 ? th.labelVisited : th.label,
         weight: on2 ? 1e6 : 0          // 已点亮的优先占位
       });

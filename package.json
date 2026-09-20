@@ -17,6 +17,7 @@
   "scripts": {
     "build": "python3 build_preview.py",
     "test": "node test_kernel.js",
+    "test:http": "node test_http.js",
     "shots": "node shots.js",
     "serve": "python3 -m http.server 8080"
   },
