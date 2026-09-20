@@ -266,6 +266,7 @@ npm install
 npx playwright install chromium
 npm run shots        # 跑 8 个场景，写入 shots/，有 console error 则退出码非 0
 npm run test:http    # 另起一个内存 http 服务，验真实部署路径（fetch cities.json）
+npm run test:live    # 打开线上 Pages，下钻广东并点亮几个市（需联网）
 ```
 > 若本机已有 Chrome 内核，可用 `CHROME_PATH=/path/to/chrome npm run shots` 跳过下载。
 >
