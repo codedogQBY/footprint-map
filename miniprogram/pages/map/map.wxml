@@ -1,0 +1,48 @@
+<view class="page">
+
+  <view class="header">
+    <view class="row">
+      <text class="title">足迹点亮</text>
+      <text class="stat">{{statText}}</text>
+    </view>
+
+    <view class="seg">
+      <view class="seg-item {{mode === 'china' ? 'on' : ''}}" data-mode="china" bindtap="switchMode">中国地图</view>
+      <view class="seg-item {{mode === 'world' ? 'on' : ''}}" data-mode="world" bindtap="switchMode">世界地图</view>
+    </view>
+
+    <view class="crumb" wx:if="{{focusName}}">
+      <text class="crumb-back" bindtap="backToChina">中国</text>
+      <text class="crumb-sep">›</text>
+      <text class="crumb-cur">{{focusName}}</text>
+    </view>
+  </view>
+
+  <view class="stage">
+    <canvas id="map" type="2d" class="cv" bindtouchend="onTouchEnd"></canvas>
+
+    <view class="legend">
+      <view class="legend-item"><view class="sw off"></view><text>未点亮</text></view>
+      <view class="legend-item"><view class="sw on"></view><text>已点亮</text></view>
+    </view>
+
+    <view class="sheet {{sheetShow ? 'show' : ''}}">
+      <view class="sheet-info">
+        <view class="sheet-name">{{sheetName}}</view>
+        <view class="sheet-sub">{{sheetSub}}</view>
+      </view>
+      <view class="sheet-acts">
+        <view class="btn" wx:if="{{canDrill}}" bindtap="onSheetDrill">进入省内</view>
+        <view class="btn {{sheetVisited ? 'ghost' : 'primary'}}" bindtap="onSheetToggle">
+          {{sheetVisited ? '取消点亮' : '点亮'}}
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="footer">
+    <text class="tip">点击省份选中，再点一次进入省内｜省内地级市以圆点表示，点即点亮</text>
+    <text class="reset" bindtap="onReset">清空</text>
+  </view>
+
+</view>

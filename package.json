@@ -1,0 +1,26 @@
+{
+  "name": "footprint-map",
+  "version": "1.0.0",
+  "description": "足迹点亮地图：一套纯 JS 内核同时跑 H5 与微信小程序，支持世界/中国地图切换、下钻到省、省内城市点亮",
+  "keywords": [
+    "canvas",
+    "geojson",
+    "map",
+    "miniprogram",
+    "wechat",
+    "h5",
+    "travel-map",
+    "visited"
+  ],
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "python3 build_preview.py",
+    "test": "node test_kernel.js",
+    "shots": "node shots.js",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "pages": ["pages/map/map"],
+  "window": {
+    "backgroundTextStyle": "dark",
+    "navigationBarBackgroundColor": "#F7F6F3",
+    "navigationBarTitleText": "足迹点亮",
+    "navigationBarTextStyle": "black"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

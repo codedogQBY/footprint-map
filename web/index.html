@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="VfduVJTXyyRwbfqlGtrMp0">
+<head data-page-node-id="p9i1CdqLvxGkPbwYOpUEXM">
+<meta charset="utf-8" data-page-node-id="Kcxi6Qb6WZGgtFmD76W8Iz">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" data-page-node-id="aEWklOsvlLkE7kpSNpi8UY">
+<title>足迹点亮 · H5</title>
+<style>
+  :root {
+    --bg: #F7F6F3;
+    --panel: #FFFFFF;
+    --text: #2C2C2A;
+    --text-2: #6B6961;
+    --text-3: #9A978E;
+    --line: #E5E4DF;
+    --brand: #D85A30;
+    --brand-dark: #993C1D;
+    --brand-soft: #FAECE7;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  body { display: flex; flex-direction: column; }
+
+  /* ---------- 顶部 ---------- */
+  header { flex: none; padding: max(12px, env(safe-area-inset-top)) 16px 8px; }
+  .row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  h1 { font-size: 15px; font-weight: 500; margin: 0; }
+  .stats { font-size: 12px; color: var(--text-2); }
+  .stats b { font-weight: 500; color: var(--brand); }
+
+  .seg { display: inline-flex; background: #ECEAE4; border-radius: 9px; padding: 3px; margin-top: 10px; }
+  .seg button { border: 0; background: transparent; color: var(--text-2); padding: 6px 18px; border-radius: 7px;
+    font: inherit; font-size: 13px; cursor: pointer; transition: background .16s, color .16s; }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); font-weight: 500;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+
+  .crumb { display: none; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+  .crumb.show { display: flex; }
+  .crumb button { border: 0; background: transparent; color: var(--brand); font: inherit; cursor: pointer; padding: 0; }
+  .crumb .sep { color: var(--text-3); }
+  .crumb .cur { color: var(--text); font-weight: 500; }
+
+  /* ---------- 画布区 ---------- */
+  /* 底部 120px 留给贴底的面板 / 进度卡，两者都绝对定位，不参与文档流 —— 
+     这样无论选中什么、点亮多少，地图区域都不会位移，连点才不会点偏。 */
+  .stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; position: relative;
+    margin: 2px 8px 0; padding-bottom: 120px; }
+  .mapbox { position: relative; width: 100%; flex: none; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+  .legend { position: absolute; left: 8px; top: 6px; display: flex; gap: 12px; font-size: 11px;
+    color: var(--text-2); pointer-events: none; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px;
+    vertical-align: -1px; }
+
+  /* ---------- 底部面板 ----------
+     固定高度 + visibility 切换：面板出现/消失不会改变布局，
+     否则地图会被顶上去，用户"点第二下进入省内"就会点偏。 */
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 108px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+    display: flex; visibility: hidden; gap: 10px; align-items: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+  .sheet.show { visibility: visible; }
+  .sheet .info { flex: 1 1 auto; min-width: 0; }
+  .sheet .name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sheet .sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .sheet .acts { display: flex; gap: 8px; flex: none; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 9px;
+    padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 500; }
+  .btn.ghost { color: var(--brand-dark); border-color: #F0CFC2; background: var(--brand-soft); }
+
+  /* ---------- 进度卡片 ---------- */
+  .card { position: absolute; left: 0; right: 0; bottom: 0; height: 108px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow: hidden; }
+  .prog { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); }
+  .bar { flex: 1 1 auto; height: 6px; border-radius: 3px; background: #ECEAE4; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--brand); border-radius: 3px;
+    transition: width .25s ease; }
+  .prog b { font-weight: 500; color: var(--text); }
+  .chips { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; margin-top: 10px;
+    height: 54px; overflow: hidden; }
+  .chips span { font-size: 11px; color: var(--brand-dark); background: var(--brand-soft);
+    border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+  .chips .empty { color: var(--text-3); background: transparent; padding-left: 0; }
+
+  .tip { flex: none; padding: 10px 16px max(10px, env(safe-area-inset-bottom)); font-size: 11px;
+    color: var(--text-3); text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body data-page-node-id="WeGJVY2lMEFgA6DH2asTw3">
+<header data-page-node-id="TxCOxK6I1szGFR4BvX5Z6u">
+  <div class="row" data-page-node-id="oWmvHgEsVmHveYqCDR4YJN">
+    <h1 data-page-node-id="atmNY80oUxv7NCteGHR0dX">足迹点亮</h1>
+    <div class="stats" id="stats" data-page-node-id="YG0HKXrOdPHXtMoaOJhZ46"></div>
+  </div>
+  <div class="seg" id="seg" data-page-node-id="rZECDaGeMzzBh95dzFIBD5">
+    <button data-mode="china" aria-pressed="true" data-page-node-id="KYi9GBfJEymz0A9Ba4Ivqu">中国地图</button>
+    <button data-mode="world" aria-pressed="false" data-page-node-id="ZvmH5Oei0rITE7uuMA6a15">世界地图</button>
+  </div>
+  <div class="crumb" id="crumb" data-page-node-id="KXEMTAfJ2IeVaLBRt4U5Ye"></div>
+</header>
+
+<div class="stage" id="stage" data-page-node-id="jtqHeNXWCxBhdnR838YAMZ">
+  <div class="mapbox" id="mapbox" data-page-node-id="nKlaGd69GLCShjvBYxBE4J">
+    <canvas id="cv" data-page-node-id="kLlwX6GBhqFbEGXUhOZDew"></canvas>
+    <div class="legend" data-page-node-id="uvwCXm17ybgGDT3uIvFG7V">
+      <span data-page-node-id="eIgavyNho4xbwQ6Cyfrr5M"><i style="background:#E9E7E1;border:1px solid #D5D2C9" data-page-node-id="H3Y1gpf7MXk9V0oGqHLdRt"></i>未点亮</span>
+      <span data-page-node-id="LLRwsATpGFlZBCBmgCmGBQ"><i style="background:#D85A30" data-page-node-id="PDYglLFI1Bkglurf85zW91"></i>已点亮</span>
+    </div>
+  </div>
+  <div class="sheet" id="sheet" data-page-node-id="OHDHlymMOSrOLpGqC5jIzM">
+    <div class="info" data-page-node-id="sSUMZjbk9n8cWL0ceCQVCU">
+      <div class="name" id="sheetName" data-page-node-id="mi49j1oNXtGwS8kx4GNnFa"></div>
+      <div class="sub" id="sheetSub" data-page-node-id="OgN0WUIfEXBa2xmQGOSxkc"></div>
+    </div>
+    <div class="acts" data-page-node-id="UgAf05xmFUDXQj0vZ2uGOn">
+      <button class="btn" id="btnDrill" style="display:none" data-page-node-id="e2tNkR9GzHinBHWW9sHRAd">进入省内</button>
+      <button class="btn primary" id="btnToggle" data-page-node-id="ABSVaty3GTkqd2LMCwsPls">点亮</button>
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="blpy70UJc1j4Vu6cAlODEC">
+    <div class="prog" data-page-node-id="yZeCY1uwiqOXZXnTN8X4CG">
+      <div class="bar" data-page-node-id="yQRyhxhdxsdm1Sx5b2aC3d"><i id="bar" style="width:0%" data-page-node-id="VAQvxP7lIlhFxT44D4iPdm"></i></div>
+      <span id="progText" data-page-node-id="6EXmhDi2Eqate9fNOgEJd9"></span>
+    </div>
+    <div class="chips" id="chips" data-page-node-id="Gl7vRK4rnQFMT9VEMFVeBX"></div>
+  </div>
+</div>
+
+<div class="tip" data-page-node-id="BkBDEXVXymF9l4eKTMmVvz">点击省份选中，再点一次进入省内 · 省内地级市点即点亮</div>
+
+<script src="../src/map-core.js"></script>
+<script>
+(function () {
+  var STORE_KEY = 'footprint.visited.v1';
+  var cv = document.getElementById('cv');
+  var ctx = cv.getContext('2d');
+  var stage = document.getElementById('stage');
+  var mapbox = document.getElementById('mapbox');
+  var sheet = document.getElementById('sheet');
+  var btnToggle = document.getElementById('btnToggle');
+  var btnDrill = document.getElementById('btnDrill');
+  var card = document.querySelector('.card');
+  var bar = document.getElementById('bar');
+  var progText = document.getElementById('progText');
+  var chips = document.getElementById('chips');
+  var kernel = null;
+  var hoverKey = null;
+  var toastEl = null, toastTimer = null;
+
+  function loadStore() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) { return null; }
+  }
+  function saveStore() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(kernel.exportVisited())); } catch (e) {}
+  }
+  function demoSeed() {
+    return {
+      provinces: ['440000', '330000', '310000', '110000', '510000', '350000'],
+      countries: [],
+      cities: ['440000:0', '440000:1', '330000:0', '710000:0', '810000:0']
+    };
+  }
+
+  /** 画布高度跟着地图比例走，把竖屏里的空白挤掉 */
+  function layout() {
+    var w = stage.clientWidth;
+    if (!w) return;
+    var avail = stage.clientHeight - 120;   // 减掉 stage 的 padding-bottom
+    var preferred = kernel ? kernel.preferredHeight(w) : w * 0.6;
+    if (kernel && kernel.hasInset()) preferred += kernel.insetHeight();
+    var h = Math.max(160, Math.min(preferred, avail));
+    mapbox.style.height = h + 'px';
+
+    var dpr = Math.min(window.devicePixelRatio || 1, 3);
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (kernel) { kernel.setSize(w, h); kernel.draw(ctx); }
+  }
+
+  function render() {
+    if (!kernel) return;
+    kernel.draw(ctx);
+    updateChrome();
+  }
+
+  function countFocusCities() {
+    var list = kernel.visibleCities(), n = 0;
+    for (var i = 0; i < list.length; i++) if (kernel.isVisited('city', kernel.cityKey(kernel.focus, i))) n++;
+    return n;
+  }
+
+  function renderCard() {
+    var names = [], total = 0, unit = '';
+    if (kernel.mode === 'world') {
+      unit = '个国家 / 地区';
+      total = kernel.countries.length;
+      for (var i = 0; i < kernel.countries.length; i++) {
+        if (kernel.isVisited('country', kernel.countries[i].key)) names.push(kernel.countries[i].name);
+      }
+    } else if (kernel.focus) {
+      unit = '个市';
+      var list = kernel.visibleCities();
+      total = list.length;
+      for (var j = 0; j < list.length; j++) {
+        if (kernel.isVisited('city', kernel.cityKey(kernel.focus, j))) names.push(list[j].name);
+      }
+    } else {
+      unit = '个省级行政区';
+      for (var m = 0; m < kernel.provinces.length; m++) {
+        var p = kernel.provinces[m];
+        if (p.key === '100000_JD') continue;
+        total++;
+        if (kernel.isVisited('province', p.key)) names.push(p.name);
+      }
+    }
+    bar.style.width = (total ? Math.round(names.length / total * 100) : 0) + '%';
+    progText.innerHTML = '已点亮 <b>' + names.length + '</b> / ' + total + ' ' + unit;
+    if (!names.length) {
+      chips.innerHTML = '<span class="empty">还没有点亮任何地方</span>';
+      return;
+    }
+    names.sort();
+    chips.innerHTML = names.slice(0, 40).map(function (n) {
+      return '<span>' + n + '</span>';
+    }).join('') + (names.length > 40 ? '<span>+' + (names.length - 40) + '</span>' : '');
+  }
+
+  function updateChrome() {
+    var v = kernel.exportVisited();
+    var s;
+    if (kernel.mode === 'world') s = '已点亮 <b>' + v.countries.length + '</b> 个国家 / 地区';
+    else if (kernel.focus) s = '本省已点亮 <b>' + countFocusCities() + '</b> 个市';
+    else s = '已点亮 <b>' + v.provinces.length + '</b> 个省级行政区';
+    document.getElementById('stats').innerHTML = s;
+    renderCard();
+
+    var crumb = document.getElementById('crumb');
+    if (kernel.mode === 'china' && kernel.focus) {
+      var f = kernel.provinceByKey[kernel.focus];
+      crumb.className = 'crumb show';
+      crumb.innerHTML = '<button id="crumbBack">中国</button><span class="sep">›</span><span class="cur">' +
+        (f ? f.name : '') + '</span>';
+      document.getElementById('crumbBack').onclick = function () {
+        kernel.back(); hideSheet(); layout(); render();
+      };
+    } else {
+      crumb.className = 'crumb';
+    }
+  }
+
+  function hasChildren(ad) {
+    var bag = kernel.cities[ad];
+    return !!(bag && bag.cities && bag.cities.length);
+  }
+
+  /** 面板和进度卡共用一个位置，谁显示谁占位 —— 都不参与布局，所以地图永不位移 */
+  function setSheetVisible(on) {
+    sheet.className = on ? 'sheet show' : 'sheet';
+    card.style.visibility = on ? 'hidden' : '';
+  }
+
+  function hideSheet() {
+    if (kernel) kernel.selected = null;
+    setSheetVisible(false);
+  }
+
+  function syncSheet() {
+    var sel = kernel.selected;
+    if (!sel || sel.kind === 'city') { setSheetVisible(false); return; }
+    var obj = sel.kind === 'country' ? kernel.countryByKey[sel.key] : kernel.provinceByKey[sel.key];
+    if (!obj) { setSheetVisible(false); return; }
+    var visited = kernel.isVisited(sel.kind, sel.key);
+    document.getElementById('sheetName').textContent = obj.name;
+    document.getElementById('sheetSub').textContent =
+      (sel.kind === 'country' ? '国家 / 地区' : '省级行政区') + (visited ? ' · 已点亮' : ' · 未点亮');
+    btnToggle.textContent = visited ? '取消点亮' : '点亮';
+    btnToggle.className = visited ? 'btn ghost' : 'btn primary';
+    btnDrill.style.display = (sel.kind === 'province' && hasChildren(sel.key)) ? '' : 'none';
+    btnDrill.onclick = function () { kernel.drill(sel.key); hideSheet(); layout(); render(); };
+    setSheetVisible(true);
+  }
+
+  btnToggle.onclick = function () {
+    var sel = kernel.selected;
+    if (!sel) return;
+    kernel.toggle(sel.kind, sel.key);
+    saveStore();
+    syncSheet();
+    render();
+  };
+
+  document.getElementById('seg').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b || !kernel) return;
+    var mode = b.dataset.mode;
+    if (mode === kernel.mode && !kernel.focus) return;
+    [].forEach.call(this.querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    kernel.setMode(mode);
+    hideSheet();
+    layout();
+    render();
+  });
+
+  function pos(e) {
+    var r = cv.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+
+  var down = null;
+  cv.addEventListener('pointerdown', function (e) { down = pos(e); });
+  cv.addEventListener('pointerup', function (e) {
+    if (!down) return;
+    var p = pos(e);
+    var moved = Math.hypot(p[0] - down[0], p[1] - down[1]);
+    down = null;
+    if (moved > 10) return;
+    var hit = kernel.hitTest(p[0], p[1]);
+
+    if (kernel.focus) {
+      if (hit && hit.kind === 'city') {
+        kernel.toggle('city', hit.key);
+        saveStore();
+        render();
+        toast(kernel.isVisited('city', hit.key) ? '已点亮 ' + hit.name : '已取消 ' + hit.name);
+      }
+      return;
+    }
+    if (!hit) { hideSheet(); layout(); render(); return; }
+    if (kernel.selected && kernel.selected.key === hit.key && hit.kind === 'province' && hasChildren(hit.key)) {
+      kernel.drill(hit.key); hideSheet(); layout(); render(); return;
+    }
+    kernel.selected = { kind: hit.kind, key: hit.key };
+    syncSheet();
+    layout();
+    render();
+  });
+
+  cv.addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'touch') return;
+    var p = pos(e);
+    var hit = kernel.hitTest(p[0], p[1]);
+    var k = hit ? hit.kind + ':' + hit.key : null;
+    if (k === hoverKey) return;
+    hoverKey = k;
+    kernel.hover = hit ? { kind: hit.kind, key: hit.key } : null;
+    render();
+  });
+
+  function toast(msg) {
+    if (!toastEl) {
+      toastEl = document.createElement('div');
+      toastEl.style.cssText = 'position:absolute;left:50%;bottom:12px;transform:translateX(-50%);' +
+        'background:rgba(44,44,42,.88);color:#fff;font-size:12px;padding:6px 12px;border-radius:999px;' +
+        'pointer-events:none;opacity:0;transition:opacity .18s';
+      mapbox.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.style.opacity = '0'; }, 1100);
+  }
+
+  new ResizeObserver(layout).observe(stage);
+  window.addEventListener('orientationchange', function () { setTimeout(layout, 220); });
+
+  Promise.resolve(window.__MAP_DATA__ || fetch('../dist/mapdata.json').then(function (r) { return r.json(); }))
+    .then(function (data) {
+      kernel = MapCore.create(data, {});
+      kernel.importVisited(loadStore() || demoSeed());
+      window.__kernel = kernel;   // 调试 / 自动化用
+      layout();
+      render();
+    })
+    .catch(function (err) {
+      document.querySelector('.tip').innerHTML =
+        '数据加载失败：' + err.message + '<br>直接双击打开（file://）会被浏览器拦截，请改用 preview.html';
+    });
+})();
+</script>
+</body>
+</html>
